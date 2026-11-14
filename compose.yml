@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: memcode_api:dev
+    container_name: memcode_api
+    env_file:
+      - .env
+    networks:
+      - memcode_network
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: memcode_frontend:dev
+    container_name: memcode_frontend
+    env_file:
+      - .env
+    networks:
+      - memcode_network
+    ports:
+      - "3000:3000"
+
+networks:
+  memcode_network:
+    driver: bridge
