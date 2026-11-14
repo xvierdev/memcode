@@ -23,7 +23,7 @@ services:
     networks:
       - memcode_network
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-80}:80"
 
 networks:
   memcode_network:
