@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Response, status
 from pymongo.errors import DuplicateKeyError
+
 from src.api.deps import CurrentUser, UsersCollection
 from src.core.config import settings
 from src.core.security import create_access_token, hash_password, verify_password
@@ -70,6 +71,19 @@ def login(
         path="/",
     )
     return LoginResponse()
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout() -> Response:
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(
+        key=settings.AUTH_COOKIE_NAME,
+        path="/",
+        secure=settings.AUTH_COOKIE_SECURE,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 
 @router.patch("/password", status_code=status.HTTP_204_NO_CONTENT)

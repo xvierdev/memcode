@@ -6,6 +6,7 @@ import pytest
 from bson import ObjectId
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
 from src.api.deps import get_codes_collection, get_users_collection
 from src.api.routes import auth, codes
 from src.core.config import settings
@@ -244,6 +245,32 @@ def test_login_returns_a_signed_token_with_configured_expiration(api_client):
         <= settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
     assert client.get("/codes").status_code == 200
+
+
+def test_logout_expires_cookie_and_ends_browser_session(api_client):
+    client, _, _ = api_client
+    register_and_login(client)
+    assert client.get("/codes").status_code == 200
+
+    response = client.post("/auth/logout")
+
+    assert response.status_code == 204
+    set_cookie = response.headers["set-cookie"].lower()
+    assert f"{settings.AUTH_COOKIE_NAME.lower()}=" in set_cookie
+    assert "max-age=0" in set_cookie
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+    assert client.cookies.get(settings.AUTH_COOKIE_NAME) is None
+    assert client.get("/codes").status_code == 401
+
+
+def test_logout_succeeds_without_an_authenticated_session(api_client):
+    client, _, _ = api_client
+
+    response = client.post("/auth/logout")
+
+    assert response.status_code == 204
+    assert "max-age=0" in response.headers["set-cookie"].lower()
 
 
 def test_password_change_requires_the_correct_current_password(api_client):
