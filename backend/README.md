@@ -30,30 +30,37 @@ erDiagram
 
 ## Configuração e execução
 
-1. Copie os exemplos de ambiente para `.env` e configure uma chave JWT:
+1. Copie o exemplo raiz para `.env` e configure uma chave JWT:
 
    ```sh
    cp .env.example .env
-   cp backend/.env.example backend/.env
    openssl rand -hex 32
    ```
 
-   Coloque o valor gerado em `SECRET_KEY`. A API recusa chaves com menos de 32 bytes. Portas e porta publicada do MongoDB ficam no `.env` da raiz; URI, timeout, banco e origens CORS ficam no `.env` do backend.
-2. Inicie o MongoDB:
+   Coloque o valor gerado em `SECRET_KEY`. A API recusa chaves com menos de 32 bytes. `backend/.env` é opcional e serve somente como fallback para configurações antigas.
+2. Inicie MongoDB e API:
 
    ```sh
-   docker compose up -d mongodb
+   docker compose up -d --build mongodb backend
    ```
-3. Execute a API localmente a partir de `backend/`:
+3. Execute a API localmente a partir de `backend/` (MongoDB deve estar ativo):
 
    ```sh
    cd backend
    uv run uvicorn src.main:app --reload
    ```
 
-A execução local fica disponível em `http://localhost:8000`; o Swagger UI fica em `/docs` e o healthcheck em `/health`. Via Compose, a porta pública vem de `API_PORT` no `.env` da raiz do projeto. O MongoDB local usa `mongodb://localhost:27017`, configurado no `.env` do backend.
+A execução local fica disponível em `http://localhost:8000`; o Swagger UI fica em `/docs` e o healthcheck em `/health`. A configuração compartilhada vem do `.env` na raiz; `backend/.env` é apenas um arquivo de fallback durante a transição. No desenvolvimento local, o frontend usa `frontend/.env` com `VITE_API_BASE_URL=http://localhost:8000`; no Compose, usa `/api` via proxy Nginx para o backend.
 
-Na raiz do repositório, para executar a API pelo Compose, use `docker compose up --build backend`; o Compose aponta o container da API para o serviço `mongodb` na rede privada.
+Para executar o frontend localmente, copie `frontend/.env.example` para `frontend/.env` e inicie Vite:
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+Para executar a aplicação completa em containers, use `docker compose up --build`; o frontend usa `/api` via Nginx e o Compose encaminha as chamadas ao backend.
 
 Para executar os testes do backend:
 
@@ -67,16 +74,19 @@ uv run --group dev pytest
 | Método | Endpoint | Acesso | Descrição |
 | --- | --- | --- | --- |
 | `POST` | `/auth/register` | Público | Cria uma conta |
-| `POST` | `/auth/login` | Público | Autentica e retorna um token Bearer |
-| `PATCH` | `/auth/password` | JWT | Altera a senha |
-| `POST` | `/codes` | JWT | Adiciona um snippet |
-| `GET` | `/codes` | JWT | Lista os snippets do usuário |
-| `GET` | `/codes/search` | JWT | Busca snippets com filtros |
-| `GET` | `/codes/{code_id}` | JWT | Consulta um snippet |
-| `PUT` | `/codes/{code_id}` | JWT | Atualiza um snippet |
-| `DELETE` | `/codes/{code_id}` | JWT | Remove um snippet |
+| `POST` | `/auth/login` | Público | Autentica e define um cookie de sessão HttpOnly |
+| `POST` | `/auth/logout` | Público | Encerra a sessão removendo o cookie HttpOnly |
+| `PATCH` | `/auth/password` | Cookie/JWT | Altera a senha |
+| `POST` | `/codes` | Cookie/JWT | Adiciona um snippet |
+| `GET` | `/codes` | Cookie/JWT | Lista os snippets do usuário |
+| `GET` | `/codes/search` | Cookie/JWT | Busca snippets com filtros |
+| `GET` | `/codes/{code_id}` | Cookie/JWT | Consulta um snippet |
+| `PUT` | `/codes/{code_id}` | Cookie/JWT | Atualiza um snippet |
+| `DELETE` | `/codes/{code_id}` | Cookie/JWT | Remove um snippet |
 
-Após o login, use o token no botão **Authorize** do Swagger UI.
+Após o login, a API define um cookie HttpOnly `memcode_access_token` e não expõe o JWT no corpo da resposta. O navegador envia o cookie automaticamente às rotas protegidas. O Swagger, aberto no mesmo host da API, também usa o cookie do navegador. Defina `AUTH_COOKIE_SECURE=true` quando a aplicação estiver servida por HTTPS.
+
+O logout remove o cookie do navegador. Como o JWT é stateless, isso não revoga uma cópia do token obtida fora do navegador; ela permanece válida até expirar.
 
 Na busca, informe pelo menos um parâmetro entre `title`, `description`, `language` e `code`. Os filtros de título, descrição e conteúdo procuram trechos sem diferenciar maiúsculas de minúsculas; `language` compara o nome completo da linguagem sem diferenciar maiúsculas de minúsculas. Quando mais de um parâmetro é informado, todos precisam corresponder ao snippet. Exemplo: `/codes/search?title=python&language=Python`.
 
