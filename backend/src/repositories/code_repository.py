@@ -22,6 +22,20 @@ class CodeRepository:
         self.collection = collection
         self.user_id = user_id
 
+    def _code_query(self, code_id: str) -> dict[str, Any]:
+        return {"_id": code_id, "user_id": self.user_id}
+
+    def _save_comments(self, code_id: str, comments: list[dict[str, Any]]) -> bool:
+        result = self.collection.update_one(
+            self._code_query(code_id),
+            {"$set": {"comments": comments}},
+        )
+        return result.matched_count == 1
+
+    def _list_codes(self, query: dict[str, Any]) -> list[dict[str, Any]]:
+        documents = self.collection.find(query).sort("created_at", -1)
+        return [self._to_response(document) for document in documents]
+
     def create(self, data: CodeCreate) -> dict[str, Any]:
         code_id = str(uuid4())
         now = _utc_now()
@@ -40,17 +54,11 @@ class CodeRepository:
         return self._to_response(stored_code)
 
     def get(self, code_id: str) -> dict[str, Any] | None:
-        document = self.collection.find_one(
-            {"_id": code_id, "user_id": self.user_id},
-        )
+        document = self.collection.find_one(self._code_query(code_id))
         return self._to_response(document) if document is not None else None
 
     def get_all(self) -> list[dict[str, Any]]:
-        documents = self.collection.find({"user_id": self.user_id}).sort(
-            "created_at",
-            -1,
-        )
-        return [self._to_response(document) for document in documents]
+        return self._list_codes({"user_id": self.user_id})
 
     def search(
         self,
@@ -75,12 +83,11 @@ class CodeRepository:
                 "$options": "i",
             }
 
-        documents = self.collection.find(query).sort("created_at", -1)
-        return [self._to_response(document) for document in documents]
+        return self._list_codes(query)
 
     def update(self, code_id: str, data: CodeUpdate) -> dict[str, Any] | None:
         result = self.collection.update_one(
-            {"_id": code_id, "user_id": self.user_id},
+            self._code_query(code_id),
             {
                 "$set": {
                     **data.model_dump(),
@@ -91,8 +98,7 @@ class CodeRepository:
         return self.get(code_id) if result.matched_count == 1 else None
 
     def add_comment(self, code_id: str, text: str) -> dict[str, Any] | None:
-        query = {"_id": code_id, "user_id": self.user_id}
-        document = self.collection.find_one(query)
+        document = self.collection.find_one(self._code_query(code_id))
         if document is None:
             return None
 
@@ -104,8 +110,7 @@ class CodeRepository:
             "updated_at": now,
         }
         comments = [comment, *self._normalize_comments(document)]
-        result = self.collection.update_one(query, {"$set": {"comments": comments}})
-        return comment if result.matched_count == 1 else None
+        return comment if self._save_comments(code_id, comments) else None
 
     def update_comment(
         self,
@@ -113,8 +118,7 @@ class CodeRepository:
         comment_id: str,
         text: str,
     ) -> dict[str, Any] | None:
-        query = {"_id": code_id, "user_id": self.user_id}
-        document = self.collection.find_one(query)
+        document = self.collection.find_one(self._code_query(code_id))
         if document is None:
             return None
 
@@ -133,12 +137,10 @@ class CodeRepository:
         if updated_comment is None:
             return None
 
-        result = self.collection.update_one(query, {"$set": {"comments": comments}})
-        return updated_comment if result.matched_count == 1 else None
+        return updated_comment if self._save_comments(code_id, comments) else None
 
     def delete_comment(self, code_id: str, comment_id: str) -> bool:
-        query = {"_id": code_id, "user_id": self.user_id}
-        document = self.collection.find_one(query)
+        document = self.collection.find_one(self._code_query(code_id))
         if document is None:
             return False
 
@@ -149,15 +151,11 @@ class CodeRepository:
         if len(updated_comments) == len(comments):
             return False
 
-        result = self.collection.update_one(
-            query,
-            {"$set": {"comments": updated_comments}},
-        )
-        return result.matched_count == 1
+        return self._save_comments(code_id, updated_comments)
 
     def delete(self, code_id: str) -> bool:
         result = self.collection.delete_one(
-            {"_id": code_id, "user_id": self.user_id},
+            self._code_query(code_id),
         )
         return result.deleted_count == 1
 

@@ -5,6 +5,8 @@ from bson import ObjectId
 from pymongo.collection import Collection
 from pymongo.results import InsertOneResult
 
+_USER_PROJECTION = {"email": 1, "password_hash": 1, "created_at": 1}
+
 
 class UserRepository:
     def __init__(self, collection: Collection[dict[str, Any]]) -> None:
@@ -23,13 +25,13 @@ class UserRepository:
     def get_by_email(self, email: str) -> dict[str, Any] | None:
         return self.collection.find_one(
             {"email": email.strip().lower()},
-            {"email": 1, "password_hash": 1, "created_at": 1},
+            _USER_PROJECTION,
         )
 
     def get_by_id(self, user_id: ObjectId) -> dict[str, Any] | None:
         return self.collection.find_one(
             {"_id": user_id},
-            {"email": 1, "password_hash": 1, "created_at": 1},
+            _USER_PROJECTION,
         )
 
     def update_password(self, user_id: ObjectId, password_hash: str) -> bool:
