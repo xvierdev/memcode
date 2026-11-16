@@ -1,7 +1,6 @@
 services:
   mongodb:
     image: mongo:latest
-    container_name: memcode_mongodb
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME:?Set MONGODB_USERNAME in .env}
@@ -18,12 +17,11 @@ services:
       timeout: 10s
       retries: 5
 
-  backend:
+  backend1:
+    image: memcode_api:dev
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: memcode_api:dev
-    container_name: memcode_api
     restart: unless-stopped
     env_file:
       - path: ./backend/.env
@@ -41,6 +39,76 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  backend2:
+    image: memcode_api:dev
+    restart: unless-stopped
+    env_file:
+      - path: ./backend/.env
+        required: false
+      - path: ./.env
+    environment:
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017}
+      MONGODB_USERNAME: ${MONGODB_USERNAME:?Set MONGODB_USERNAME in .env}
+      MONGODB_PASSWORD: ${MONGODB_PASSWORD:?Set MONGODB_PASSWORD in .env}
+      MONGODB_AUTH_SOURCE: ${MONGODB_AUTH_SOURCE:-admin}
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-memcode}
+    networks:
+      - memcode_network
+      - mongodb_network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  backend3:
+    image: memcode_api:dev
+    restart: unless-stopped
+    env_file:
+      - path: ./backend/.env
+        required: false
+      - path: ./.env
+    environment:
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017}
+      MONGODB_USERNAME: ${MONGODB_USERNAME:?Set MONGODB_USERNAME in .env}
+      MONGODB_PASSWORD: ${MONGODB_PASSWORD:?Set MONGODB_PASSWORD in .env}
+      MONGODB_AUTH_SOURCE: ${MONGODB_AUTH_SOURCE:-admin}
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-memcode}
+    networks:
+      - memcode_network
+      - mongodb_network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   frontend:
     build:
@@ -49,14 +117,18 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     image: memcode_frontend:dev
-    container_name: memcode_frontend
     restart: unless-stopped
     networks:
       - memcode_network
+    depends_on:
+      backend1:
+        condition: service_healthy
+      backend2:
+        condition: service_healthy
+      backend3:
+        condition: service_healthy
     ports:
       - "${WEB_PORT:-80}:80"
-    depends_on:
-      - backend
 
 networks:
   memcode_network:
