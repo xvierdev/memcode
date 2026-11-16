@@ -2,11 +2,17 @@
 
 API REST em FastAPI para cadastro e login com JWT e gerenciamento autenticado de snippets de código. Os usuários ficam na coleção `users`; cada snippet é um documento separado na coleção `codes`, com `user_id` referenciando seu dono. Os comentários permanecem embutidos no documento do snippet.
 
+## Sumário
+
+- [Arquitetura do banco](#arquitetura-do-banco)
+- [Configuração e execução](#configuração-e-execução)
+- [Endpoints](#endpoints)
+
 ## Arquitetura do banco
 
 ```mermaid
 erDiagram
-    USERS ||--o{ CODES : owns
+    USERS ||--o{ CODES : "owns (logical reference)"
     USERS {
         ObjectId _id PK
         string email UK
@@ -14,13 +20,13 @@ erDiagram
         datetime created_at
     }
     CODES {
-        string _id PK
-        ObjectId user_id FK
+        string _id PK "UUID"
+        ObjectId user_id "references users._id"
         string title
         string description
         string language
         string code
-        array comments
+        array comments "embedded documents"
         datetime created_at
         datetime updated_at
     }
@@ -38,10 +44,10 @@ erDiagram
    ```
 
    Coloque o valor gerado em `SECRET_KEY`. A API recusa chaves com menos de 32 bytes. Configure também `MONGODB_USERNAME` e `MONGODB_PASSWORD`; o Compose usa essas credenciais para inicializar o MongoDB e o backend para autenticar nele. `MONGODB_AUTH_SOURCE` deve ser `admin` para o usuário root criado pelo Compose. `backend/.env` é opcional e serve somente como fallback para configurações antigas.
-2. Inicie MongoDB e API:
+2. Inicie MongoDB e as três instâncias da API:
 
    ```sh
-   docker compose up -d --build mongodb backend
+   docker compose up -d --build mongodb backend1 backend2 backend3
    ```
 3. Execute a API localmente a partir de `backend/` (MongoDB deve estar ativo). Antes, ajuste `MONGODB_URI` no `.env` para `mongodb://localhost:<MONGODB_HOST_PORT>`:
 
