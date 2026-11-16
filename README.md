@@ -6,6 +6,10 @@ MemCode é uma aplicação web para desenvolvedores e estudantes de programaçã
 
 O acesso é feito por contas de usuário. A API autentica as sessões com JWT armazenado em cookie HttpOnly.
 
+## Demonstração do funcionamento
+
+[![Demonstração do Projeto](https://img.youtube.com/vi/Ee_fnoLcGBA/maxresdefault.jpg)](https://youtu.be/Ee_fnoLcGBA)
+
 ## Documentação dos componentes
 
 - **Frontend:** [README do frontend](./frontend/README.md) — resumo da interface, configuração local e scripts npm.
