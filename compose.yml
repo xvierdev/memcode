@@ -1,4 +1,20 @@
 services:
+  mongodb:
+    image: mongo:latest
+    container_name: memcode_mongodb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MONGODB_HOST_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - mongodb_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -6,11 +22,18 @@ services:
     image: memcode_api:dev
     container_name: memcode_api
     env_file:
-      - .env
+      - ./backend/.env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: memcode
     networks:
       - memcode_network
+      - mongodb_network
     ports:
       - "${API_PORT:-8000}:8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
 
   frontend:
     build:
@@ -28,3 +51,8 @@ services:
 networks:
   memcode_network:
     driver: bridge
+  mongodb_network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
