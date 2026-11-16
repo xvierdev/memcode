@@ -2,7 +2,7 @@ from typing import Annotated, Any
 
 import jwt
 from bson import ObjectId
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from pymongo.collection import Collection
@@ -14,6 +14,7 @@ security_scheme = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
+    request: Request,
     credentials: Annotated[
         HTTPAuthorizationCredentials | None,
         Depends(security_scheme),
@@ -28,12 +29,17 @@ def get_current_user(
         detail="Invalid or missing authentication token.",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if credentials is None:
+    token = (
+        credentials.credentials
+        if credentials is not None
+        else request.cookies.get(settings.AUTH_COOKIE_NAME)
+    )
+    if token is None:
         raise unauthorized
 
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
         )

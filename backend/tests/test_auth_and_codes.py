@@ -50,7 +50,9 @@ def register_and_login(
         json={"email": email, "password": password},
     )
     assert login.status_code == 200
-    return login.json()["access_token"]
+    token = client.cookies.get(settings.AUTH_COOKIE_NAME)
+    assert token is not None
+    return token
 
 
 def code_payload() -> dict[str, object]:
@@ -223,9 +225,15 @@ def test_login_returns_a_signed_token_with_configured_expiration(api_client):
     )
 
     assert response.status_code == 200
-    assert response.json()["token_type"] == "bearer"
+    assert response.json() == {"authenticated": True}
+    assert "access_token" not in response.json()
+    set_cookie = response.headers["set-cookie"].lower()
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+    token = response.cookies.get(settings.AUTH_COOKIE_NAME)
+    assert token is not None
     token_payload = jwt.decode(
-        response.json()["access_token"],
+        token,
         settings.SECRET_KEY,
         algorithms=[settings.ALGORITHM],
     )
@@ -235,6 +243,7 @@ def test_login_returns_a_signed_token_with_configured_expiration(api_client):
         <= token_payload["exp"] - token_payload["iat"]
         <= settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
+    assert client.get("/codes").status_code == 200
 
 
 def test_password_change_requires_the_correct_current_password(api_client):

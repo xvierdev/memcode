@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, Response, status
 from pymongo.errors import DuplicateKeyError
 from src.api.deps import CurrentUser, UsersCollection
+from src.core.config import settings
 from src.core.security import create_access_token, hash_password, verify_password
 from src.repositories.user_repository import UserRepository
 from src.schemas.auth import (
+    LoginResponse,
     PasswordChange,
-    TokenResponse,
     UserCreate,
     UserLogin,
     UserResponse,
@@ -42,8 +43,12 @@ def register(payload: UserCreate, users: UsersCollection) -> UserResponse:
     return build_user_response(user)
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(payload: UserLogin, users: UsersCollection) -> TokenResponse:
+@router.post("/login", response_model=LoginResponse)
+def login(
+    payload: UserLogin,
+    response: Response,
+    users: UsersCollection,
+) -> LoginResponse:
     user = UserRepository(users).get_by_email(str(payload.email))
     if user is None or not verify_password(
         payload.password,
@@ -55,9 +60,16 @@ def login(payload: UserLogin, users: UsersCollection) -> TokenResponse:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return TokenResponse(
-        access_token=create_access_token(str(user["_id"])),
+    response.set_cookie(
+        key=settings.AUTH_COOKIE_NAME,
+        value=create_access_token(str(user["_id"])),
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite="lax",
+        path="/",
     )
+    return LoginResponse()
 
 
 @router.patch("/password", status_code=status.HTTP_204_NO_CONTENT)
