@@ -3,17 +3,20 @@ services:
     image: mongo:latest
     container_name: memcode_mongodb
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME:?Set MONGODB_USERNAME in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:?Set MONGODB_PASSWORD in .env}
     ports:
-      - "127.0.0.1:${MONGODB_HOST_PORT:-27017}:27017"
+      - "${MONGODB_HOST_PORT:-27017}:27017"
     volumes:
       - mongodb_data:/data/db
     networks:
       - mongodb_network
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   backend:
     build:
@@ -21,18 +24,20 @@ services:
       dockerfile: Dockerfile
     image: memcode_api:dev
     container_name: memcode_api
+    restart: unless-stopped
     env_file:
       - path: ./backend/.env
         required: false
       - path: ./.env
     environment:
-      MONGODB_URI: mongodb://mongodb:27017
-      MONGODB_DATABASE: memcode
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017}
+      MONGODB_USERNAME: ${MONGODB_USERNAME:?Set MONGODB_USERNAME in .env}
+      MONGODB_PASSWORD: ${MONGODB_PASSWORD:?Set MONGODB_PASSWORD in .env}
+      MONGODB_AUTH_SOURCE: ${MONGODB_AUTH_SOURCE:-admin}
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-memcode}
     networks:
       - memcode_network
       - mongodb_network
-    ports:
-      - "${API_PORT:-8000}:8000"
     depends_on:
       mongodb:
         condition: service_healthy
@@ -45,10 +50,13 @@ services:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     image: memcode_frontend:dev
     container_name: memcode_frontend
+    restart: unless-stopped
     networks:
       - memcode_network
     ports:
       - "${WEB_PORT:-80}:80"
+    depends_on:
+      - backend
 
 networks:
   memcode_network:
