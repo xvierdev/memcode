@@ -37,13 +37,13 @@ erDiagram
    openssl rand -hex 32
    ```
 
-   Coloque o valor gerado em `SECRET_KEY`. A API recusa chaves com menos de 32 bytes. `backend/.env` é opcional e serve somente como fallback para configurações antigas.
+   Coloque o valor gerado em `SECRET_KEY`. A API recusa chaves com menos de 32 bytes. Configure também `MONGODB_USERNAME` e `MONGODB_PASSWORD`; o Compose usa essas credenciais para inicializar o MongoDB e o backend para autenticar nele. `MONGODB_AUTH_SOURCE` deve ser `admin` para o usuário root criado pelo Compose. `backend/.env` é opcional e serve somente como fallback para configurações antigas.
 2. Inicie MongoDB e API:
 
    ```sh
    docker compose up -d --build mongodb backend
    ```
-3. Execute a API localmente a partir de `backend/` (MongoDB deve estar ativo):
+3. Execute a API localmente a partir de `backend/` (MongoDB deve estar ativo). Antes, ajuste `MONGODB_URI` no `.env` para `mongodb://localhost:<MONGODB_HOST_PORT>`:
 
    ```sh
    cd backend
@@ -51,6 +51,8 @@ erDiagram
    ```
 
 A execução local fica disponível em `http://localhost:8000`; o Swagger UI fica em `/docs` e o healthcheck em `/health`. A configuração compartilhada vem do `.env` na raiz; `backend/.env` é apenas um arquivo de fallback durante a transição. No desenvolvimento local, o frontend usa `frontend/.env` com `VITE_API_BASE_URL=http://localhost:8000`; no Compose, usa `/api` via proxy Nginx para o backend.
+
+As variáveis `MONGO_INITDB_ROOT_USERNAME` e `MONGO_INITDB_ROOT_PASSWORD` só são aplicadas automaticamente quando o volume Mongo é inicializado pela primeira vez. Se o volume já contém dados, criar ou alterar usuários exige uma operação explícita no MongoDB; não remova o volume para reaplicar essas variáveis.
 
 Para executar o frontend localmente, copie `frontend/.env.example` para `frontend/.env` e inicie Vite:
 
