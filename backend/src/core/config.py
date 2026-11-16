@@ -20,6 +20,9 @@ class Settings:
         "AUTH_COOKIE_SECURE", "false"
     ).strip().lower() in {"1", "true", "yes"}
     MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+    MONGODB_USERNAME: str = os.getenv("MONGODB_USERNAME", "").strip()
+    MONGODB_PASSWORD: str = os.getenv("MONGODB_PASSWORD", "")
+    MONGODB_AUTH_SOURCE: str = os.getenv("MONGODB_AUTH_SOURCE", "admin").strip()
     MONGODB_DATABASE: str = os.getenv("MONGODB_DATABASE", "memcode")
     MONGODB_TIMEOUT_MS: int = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
     CORS_ORIGINS: tuple[str, ...] = tuple(
@@ -42,6 +45,14 @@ class Settings:
             raise RuntimeError("MONGODB_TIMEOUT_MS must be positive.")
         if not self.MONGODB_URI:
             raise RuntimeError("MONGODB_URI must not be empty.")
+        if bool(self.MONGODB_USERNAME) != bool(self.MONGODB_PASSWORD):
+            raise RuntimeError(
+                "MONGODB_USERNAME and MONGODB_PASSWORD must be configured together."
+            )
+        if self.MONGODB_USERNAME and not self.MONGODB_AUTH_SOURCE:
+            raise RuntimeError(
+                "MONGODB_AUTH_SOURCE must not be empty when credentials are set."
+            )
         if not self.MONGODB_DATABASE:
             raise RuntimeError("MONGODB_DATABASE must not be empty.")
 

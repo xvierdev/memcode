@@ -15,11 +15,20 @@ MongoConnection = tuple[
 
 
 def connect_to_mongodb() -> MongoConnection:
+    auth_options = {}
+    if settings.MONGODB_USERNAME:
+        auth_options = {
+            "username": settings.MONGODB_USERNAME,
+            "password": settings.MONGODB_PASSWORD,
+            "authSource": settings.MONGODB_AUTH_SOURCE,
+        }
+
     client: MongoClient[dict[str, Any]] = MongoClient(
         settings.MONGODB_URI,
         serverSelectionTimeoutMS=settings.MONGODB_TIMEOUT_MS,
         connectTimeoutMS=settings.MONGODB_TIMEOUT_MS,
         tz_aware=True,
+        **auth_options,
     )
     try:
         client.admin.command("ping")
