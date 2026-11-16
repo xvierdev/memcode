@@ -71,10 +71,13 @@ uv run --group dev pytest
 | `PATCH` | `/auth/password` | JWT | Altera a senha |
 | `POST` | `/codes` | JWT | Adiciona um snippet |
 | `GET` | `/codes` | JWT | Lista os snippets do usuário |
+| `GET` | `/codes/search` | JWT | Busca snippets com filtros |
 | `GET` | `/codes/{code_id}` | JWT | Consulta um snippet |
 | `PUT` | `/codes/{code_id}` | JWT | Atualiza um snippet |
 | `DELETE` | `/codes/{code_id}` | JWT | Remove um snippet |
 
 Após o login, use o token no botão **Authorize** do Swagger UI.
+
+Na busca, informe pelo menos um parâmetro entre `title`, `description`, `language` e `code`. Os filtros de título, descrição e conteúdo procuram trechos sem diferenciar maiúsculas de minúsculas; `language` compara o nome completo da linguagem sem diferenciar maiúsculas de minúsculas. Quando mais de um parâmetro é informado, todos precisam corresponder ao snippet. Exemplo: `/codes/search?title=python&language=Python`.
 
 Cada snippet tem `title`, `description`, `language`, `code` e `comments`. Os campos `id`, `created_at` e `updated_at` são gerados pela API. A coleção separada remove o limite acumulado por usuário; cada documento de snippet continua sujeito ao limite BSON do MongoDB (16 MiB), inclusive seus comentários.

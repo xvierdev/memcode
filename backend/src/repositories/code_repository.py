@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -43,6 +44,32 @@ class CodeRepository:
             "created_at",
             -1,
         )
+        return [self._to_response(document) for document in documents]
+
+    def search(
+        self,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        language: str | None = None,
+        code: str | None = None,
+    ) -> list[dict[str, Any]]:
+        query: dict[str, Any] = {"user_id": self.user_id}
+        for field, value in (
+            ("title", title),
+            ("description", description),
+            ("code", code),
+        ):
+            if value is not None:
+                query[field] = {"$regex": re.escape(value), "$options": "i"}
+
+        if language is not None:
+            query["language"] = {
+                "$regex": f"^{re.escape(language)}$",
+                "$options": "i",
+            }
+
+        documents = self.collection.find(query).sort("created_at", -1)
         return [self._to_response(document) for document in documents]
 
     def update(self, code_id: str, data: CodeUpdate) -> dict[str, Any] | None:

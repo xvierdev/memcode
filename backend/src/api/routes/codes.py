@@ -1,6 +1,7 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from src.api.deps import CodesCollection, CurrentUser
 from src.repositories.code_repository import CodeRepository
 from src.schemas.code import CodeCreate, CodeResponse, CodeUpdate
@@ -29,6 +30,30 @@ def get_all_codes(
 ) -> list[CodeResponse]:
     user_codes = CodeRepository(codes, current_user["_id"]).get_all()
     return [CodeResponse(**code) for code in user_codes]
+
+
+@router.get("/search", response_model=list[CodeResponse])
+def search_codes(
+    current_user: CurrentUser,
+    codes: CodesCollection,
+    title: Annotated[str | None, Query(min_length=1, max_length=160)] = None,
+    description: Annotated[str | None, Query(min_length=1, max_length=2000)] = None,
+    language: Annotated[str | None, Query(min_length=1, max_length=80)] = None,
+    code: Annotated[str | None, Query(min_length=1)] = None,
+) -> list[CodeResponse]:
+    if all(value is None for value in (title, description, language, code)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="At least one search filter must be provided.",
+        )
+
+    matches = CodeRepository(codes, current_user["_id"]).search(
+        title=title,
+        description=description,
+        language=language,
+        code=code,
+    )
+    return [CodeResponse(**match) for match in matches]
 
 
 @router.get("/{code_id}", response_model=CodeResponse)

@@ -172,3 +172,74 @@ def test_code_is_stored_in_its_own_document_with_comments(api_client):
     assert code is not None
     assert code["user_id"] == user["_id"]
     assert code["comments"] == payload["comments"]
+
+
+def test_code_search_requires_authentication_and_at_least_one_filter(api_client):
+    client, _, _ = api_client
+
+    unauthorized = client.get("/codes/search", params={"title": "python"})
+    assert unauthorized.status_code == 401
+
+    search_operation = client.get("/openapi.json").json()["paths"]["/codes/search"][
+        "get"
+    ]
+    assert {parameter["name"] for parameter in search_operation["parameters"]} == {
+        "title",
+        "description",
+        "language",
+        "code",
+    }
+
+    token = register_and_login(client)
+    response = client.get(
+        "/codes/search",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "At least one search filter must be provided."
+
+
+def test_code_search_matches_substrings_and_combines_filters(api_client):
+    client, _, _ = api_client
+    token = register_and_login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    matching_code = {
+        "title": "Async Python Guide",
+        "description": "A walkthrough for async requests.",
+        "language": "Python",
+        "code": "async def fetch_data():\n    await client.get('/data')",
+    }
+    other_code = {
+        "title": "Python Database Notes",
+        "description": "A database reference.",
+        "language": "javascript",
+        "code": "print('database')",
+    }
+
+    for payload in (matching_code, other_code):
+        response = client.post("/codes", headers=headers, json=payload)
+        assert response.status_code == 201
+
+    for field, value in (
+        ("title", "pYtHoN gUi"),
+        ("description", "WALKTHROUGH"),
+        ("language", "PYTHON"),
+        ("code", "AWAIT CLIENT"),
+    ):
+        response = client.get(
+            "/codes/search",
+            headers=headers,
+            params={field: value},
+        )
+        assert response.status_code == 200
+        assert [item["title"] for item in response.json()] == [matching_code["title"]]
+
+    combined = client.get(
+        "/codes/search",
+        headers=headers,
+        params={"title": "python", "description": "database"},
+    )
+
+    assert combined.status_code == 200
+    assert [item["title"] for item in combined.json()] == [other_code["title"]]
