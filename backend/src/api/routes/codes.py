@@ -3,8 +3,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from src.api.deps import CodesCollection, CurrentUser
+from src.core.security import verify_password
 from src.repositories.code_repository import CodeRepository
-from src.schemas.code import CodeCreate, CodeResponse, CodeUpdate
+from src.schemas.code import (
+    CodeComment,
+    CodeCommentCreate,
+    CodeCommentUpdate,
+    CodeCreate,
+    CodeDeleteRequest,
+    CodeResponse,
+    CodeUpdate,
+)
 
 router = APIRouter(prefix="/codes", tags=["Code snippets"])
 
@@ -90,12 +99,91 @@ def update_code(
     return CodeResponse(**code)
 
 
-@router.delete("/{code_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_code(
+@router.post(
+    "/{code_id}/comments",
+    response_model=CodeComment,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_code_comment(
     code_id: UUID,
+    payload: CodeCommentCreate,
+    current_user: CurrentUser,
+    codes: CodesCollection,
+) -> CodeComment:
+    comment = CodeRepository(codes, current_user["_id"]).add_comment(
+        str(code_id),
+        payload.text,
+    )
+    if comment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Code snippet not found.",
+        )
+    return CodeComment(**comment)
+
+
+@router.patch(
+    "/{code_id}/comments/{comment_id}",
+    response_model=CodeComment,
+)
+def update_code_comment(
+    code_id: UUID,
+    comment_id: UUID,
+    payload: CodeCommentUpdate,
+    current_user: CurrentUser,
+    codes: CodesCollection,
+) -> CodeComment:
+    comment = CodeRepository(codes, current_user["_id"]).update_comment(
+        str(code_id),
+        str(comment_id),
+        payload.text,
+    )
+    if comment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Code comment not found.",
+        )
+    return CodeComment(**comment)
+
+
+@router.delete(
+    "/{code_id}/comments/{comment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_code_comment(
+    code_id: UUID,
+    comment_id: UUID,
     current_user: CurrentUser,
     codes: CodesCollection,
 ) -> Response:
+    deleted = CodeRepository(codes, current_user["_id"]).delete_comment(
+        str(code_id),
+        str(comment_id),
+    )
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Code comment not found.",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/{code_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_code(
+    code_id: UUID,
+    payload: CodeDeleteRequest,
+    current_user: CurrentUser,
+    codes: CodesCollection,
+) -> Response:
+    if not verify_password(
+        payload.password.get_secret_value(),
+        current_user["password_hash"],
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+
     deleted = CodeRepository(codes, current_user["_id"]).delete(str(code_id))
     if not deleted:
         raise HTTPException(

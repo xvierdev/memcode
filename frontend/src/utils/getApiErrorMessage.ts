@@ -12,8 +12,10 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   switch (error.response.status) {
     case 401:
       return 'Sua sessão expirou. Faça login novamente.'
+    case 400:
+      return 'A senha informada está incorreta. Tente novamente.'
     case 404:
-      return 'O código solicitado não foi encontrado.'
+      return 'O código ou comentário solicitado não foi encontrado.'
     case 422:
       return 'Verifique os campos obrigatórios e tente novamente.'
     default: {

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response, status
 from pymongo.errors import DuplicateKeyError
-
 from src.api.deps import CurrentUser, UsersCollection
 from src.core.config import settings
 from src.core.security import create_access_token, hash_password, verify_password

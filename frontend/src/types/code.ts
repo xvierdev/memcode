@@ -1,12 +1,25 @@
+export type CodeCommentPayload = {
+  text: string
+}
+
+export type CodeComment = CodeCommentPayload & {
+  id: string
+  created_at: string
+  updated_at: string
+}
+
 export type CodeSnippetPayload = {
   title: string
   description: string
   language: string
   code: string
-  comments: string[]
 }
 
-export type CodeSnippet = CodeSnippetPayload & {
+export type CodeUpdatePayload = CodeSnippetPayload & {
+  comments: CodeComment[]
+}
+
+export type CodeSnippet = CodeUpdatePayload & {
   id: string
   created_at: string
   updated_at: string

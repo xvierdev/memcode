@@ -77,7 +77,26 @@ def code_payload() -> dict[str, object]:
             "/codes/00000000-0000-0000-0000-000000000001",
             {"json": code_payload()},
         ),
-        ("delete", "/codes/00000000-0000-0000-0000-000000000001", {}),
+        (
+            "post",
+            "/codes/00000000-0000-0000-0000-000000000001/comments",
+            {"json": {"text": "A note"}},
+        ),
+        (
+            "patch",
+            "/codes/00000000-0000-0000-0000-000000000001/comments/00000000-0000-0000-0000-000000000002",
+            {"json": {"text": "An edited note"}},
+        ),
+        (
+            "delete",
+            "/codes/00000000-0000-0000-0000-000000000001/comments/00000000-0000-0000-0000-000000000002",
+            {},
+        ),
+        (
+            "delete",
+            "/codes/00000000-0000-0000-0000-000000000001",
+            {"json": {"password": PASSWORD}},
+        ),
         (
             "patch",
             "/auth/password",
@@ -98,7 +117,10 @@ def test_all_protected_routes_require_authentication(
 ):
     client, _, _ = api_client
 
-    response = getattr(client, method)(path, **kwargs)
+    if method == "delete":
+        response = client.request("DELETE", path, **kwargs)
+    else:
+        response = getattr(client, method)(path, **kwargs)
 
     assert response.status_code == 401
 
@@ -370,25 +392,38 @@ def test_required_code_fields_cannot_be_empty(api_client, field, value):
     assert response.status_code == 422
 
 
-def test_code_is_stored_in_its_own_document_with_comments(api_client):
+def test_code_is_stored_in_its_own_document_with_empty_comments(api_client):
     client, users, codes_collection = api_client
     token = register_and_login(client)
-    payload = {**code_payload(), "comments": ["First note", "Second note"]}
 
     response = client.post(
         "/codes",
         headers={"Authorization": f"Bearer {token}"},
-        json=payload,
+        json=code_payload(),
     )
 
     assert response.status_code == 201
+    assert response.json()["comments"] == []
     user = users.find_one({"email": "developer@example.com"})
     assert user is not None
     assert "library" not in user
     code = codes_collection.find_one({"_id": response.json()["id"]})
     assert code is not None
     assert code["user_id"] == user["_id"]
-    assert code["comments"] == payload["comments"]
+    assert code["comments"] == []
+
+
+def test_code_creation_rejects_comments(api_client):
+    client, _, _ = api_client
+    token = register_and_login(client)
+
+    response = client.post(
+        "/codes",
+        headers={"Authorization": f"Bearer {token}"},
+        json={**code_payload(), "comments": ["A comment"]},
+    )
+
+    assert response.status_code == 422
 
 
 def test_authenticated_user_can_create_list_get_update_and_delete_codes(api_client):
@@ -420,7 +455,7 @@ def test_authenticated_user_can_create_list_get_update_and_delete_codes(api_clie
     update_payload = {
         **code_payload(),
         "title": "Updated Python example",
-        "comments": ["Updated note"],
+        "comments": [],
     }
     updated = client.put(
         f"/codes/{first_code['id']}",
@@ -435,13 +470,131 @@ def test_authenticated_user_can_create_list_get_update_and_delete_codes(api_clie
         updated.json()["updated_at"]
     ) >= datetime.fromisoformat(first_code["updated_at"])
 
-    deleted = client.delete(f"/codes/{second_code['id']}", headers=headers)
+    deleted = client.request(
+        "DELETE",
+        f"/codes/{second_code['id']}",
+        headers=headers,
+        json={"password": PASSWORD},
+    )
     assert deleted.status_code == 204
     assert deleted.content == b""
     assert client.get(f"/codes/{second_code['id']}", headers=headers).status_code == 404
 
     remaining = client.get("/codes", headers=headers)
     assert [item["id"] for item in remaining.json()] == [first_code["id"]]
+
+
+def test_authenticated_user_can_add_edit_and_delete_comments(api_client):
+    client, _, _ = api_client
+    token = register_and_login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    created_code = client.post("/codes", headers=headers, json=code_payload())
+    code_id = created_code.json()["id"]
+
+    first = client.post(
+        f"/codes/{code_id}/comments",
+        headers=headers,
+        json={"text": "First note"},
+    )
+    second = client.post(
+        f"/codes/{code_id}/comments",
+        headers=headers,
+        json={"text": "Second note"},
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    first_comment = first.json()
+    second_comment = second.json()
+    assert first_comment["text"] == "First note"
+    assert first_comment["id"] != second_comment["id"]
+    assert first_comment["created_at"] == first_comment["updated_at"]
+    assert second_comment["created_at"] == second_comment["updated_at"]
+
+    listed = client.get(f"/codes/{code_id}", headers=headers)
+    assert [comment["id"] for comment in listed.json()["comments"]] == [
+        second_comment["id"],
+        first_comment["id"],
+    ]
+
+    edited = client.patch(
+        f"/codes/{code_id}/comments/{first_comment['id']}",
+        headers=headers,
+        json={"text": "Updated first note"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["id"] == first_comment["id"]
+    assert edited.json()["text"] == "Updated first note"
+    assert edited.json()["created_at"] == first_comment["created_at"]
+    assert datetime.fromisoformat(
+        edited.json()["updated_at"]
+    ) >= datetime.fromisoformat(first_comment["updated_at"])
+
+    deleted = client.delete(
+        f"/codes/{code_id}/comments/{second_comment['id']}",
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+    assert deleted.content == b""
+
+    remaining = client.get(f"/codes/{code_id}", headers=headers).json()["comments"]
+    assert [comment["id"] for comment in remaining] == [first_comment["id"]]
+    assert remaining[0]["text"] == "Updated first note"
+
+
+@pytest.mark.parametrize("text", ["", "   "])
+def test_comment_text_cannot_be_empty(api_client, text):
+    client, _, _ = api_client
+    token = register_and_login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    created_code = client.post("/codes", headers=headers, json=code_payload())
+
+    response = client.post(
+        f"/codes/{created_code.json()['id']}/comments",
+        headers=headers,
+        json={"text": text},
+    )
+
+    assert response.status_code == 422
+
+
+def test_legacy_string_comments_are_returned_and_migrated_on_edit(api_client):
+    client, users, codes_collection = api_client
+    token = register_and_login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    user = users.find_one({"email": "developer@example.com"})
+    assert user is not None
+    code_id = "00000000-0000-0000-0000-000000000003"
+    updated_at = datetime.now(UTC)
+    codes_collection.insert_one(
+        {
+            **code_payload(),
+            "_id": code_id,
+            "user_id": user["_id"],
+            "comments": ["Legacy note"],
+            "created_at": updated_at - timedelta(days=1),
+            "updated_at": updated_at,
+        }
+    )
+
+    retrieved = client.get(f"/codes/{code_id}", headers=headers)
+    assert retrieved.status_code == 200
+    legacy_comment = retrieved.json()["comments"][0]
+    assert legacy_comment["text"] == "Legacy note"
+    assert legacy_comment["created_at"] == legacy_comment["updated_at"]
+    assert legacy_comment["id"]
+
+    edited = client.patch(
+        f"/codes/{code_id}/comments/{legacy_comment['id']}",
+        headers=headers,
+        json={"text": "Migrated note"},
+    )
+    assert edited.status_code == 200
+    stored_code = codes_collection.find_one({"_id": code_id})
+    assert stored_code is not None
+    assert len(stored_code["comments"]) == 1
+    assert stored_code["comments"][0]["id"] == legacy_comment["id"]
+    assert stored_code["comments"][0]["text"] == "Migrated note"
 
 
 def test_code_access_is_limited_to_the_owner(api_client):
@@ -451,6 +604,13 @@ def test_code_access_is_limited_to_the_owner(api_client):
     created = client.post("/codes", headers=owner_headers, json=code_payload())
     assert created.status_code == 201
     code_id = created.json()["id"]
+    comment = client.post(
+        f"/codes/{code_id}/comments",
+        headers=owner_headers,
+        json={"text": "Owner note"},
+    )
+    assert comment.status_code == 201
+    comment_id = comment.json()["id"]
 
     other_token = register_and_login(
         client,
@@ -475,7 +635,38 @@ def test_code_access_is_limited_to_the_owner(api_client):
         ).status_code
         == 404
     )
-    assert client.delete(f"/codes/{code_id}", headers=other_headers).status_code == 404
+    assert (
+        client.post(
+            f"/codes/{code_id}/comments",
+            headers=other_headers,
+            json={"text": "Unauthorized note"},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch(
+            f"/codes/{code_id}/comments/{comment_id}",
+            headers=other_headers,
+            json={"text": "Unauthorized edit"},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.delete(
+            f"/codes/{code_id}/comments/{comment_id}",
+            headers=other_headers,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.request(
+            "DELETE",
+            f"/codes/{code_id}",
+            headers=other_headers,
+            json={"password": PASSWORD},
+        ).status_code
+        == 404
+    )
 
     stored = codes_collection.find_one({"_id": code_id})
     assert stored is not None
@@ -498,8 +689,51 @@ def test_code_endpoints_return_expected_errors_for_missing_or_invalid_ids(api_cl
         ).status_code
         == 404
     )
-    assert client.delete(f"/codes/{missing_id}", headers=headers).status_code == 404
+    assert (
+        client.request(
+            "DELETE",
+            f"/codes/{missing_id}",
+            headers=headers,
+            json={"password": PASSWORD},
+        ).status_code
+        == 404
+    )
     assert client.get("/codes/not-a-uuid", headers=headers).status_code == 422
+
+
+def test_code_deletion_requires_the_current_password(api_client):
+    client, _, codes_collection = api_client
+    token = register_and_login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post("/codes", headers=headers, json=code_payload())
+    code_id = created.json()["id"]
+
+    missing_password = client.request(
+        "DELETE",
+        f"/codes/{code_id}",
+        headers=headers,
+        json={},
+    )
+    assert missing_password.status_code == 422
+
+    wrong_password = client.request(
+        "DELETE",
+        f"/codes/{code_id}",
+        headers=headers,
+        json={"password": "Wrong-Password-9"},
+    )
+    assert wrong_password.status_code == 400
+    assert client.get(f"/codes/{code_id}", headers=headers).status_code == 200
+    assert codes_collection.find_one({"_id": code_id}) is not None
+
+    deleted = client.request(
+        "DELETE",
+        f"/codes/{code_id}",
+        headers=headers,
+        json={"password": PASSWORD},
+    )
+    assert deleted.status_code == 204
+    assert codes_collection.find_one({"_id": code_id}) is None
 
 
 @pytest.mark.parametrize(

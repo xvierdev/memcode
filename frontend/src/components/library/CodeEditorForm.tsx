@@ -3,9 +3,10 @@ import type { SubmitEvent } from 'react'
 import type { CodeSnippet, CodeSnippetPayload } from '../../types/code'
 
 type CodeEditorFormProps = {
-  code: CodeSnippet
+  code: CodeSnippet | null
   errorMessage: string | null
   isSaving: boolean
+  submitLabel: string
   onCancel: () => void
   onSubmit: (payload: CodeSnippetPayload) => void
 }
@@ -17,14 +18,14 @@ export default function CodeEditorForm({
   code,
   errorMessage,
   isSaving,
+  submitLabel,
   onCancel,
   onSubmit,
 }: CodeEditorFormProps) {
-  const [title, setTitle] = useState(code.title)
-  const [description, setDescription] = useState(code.description)
-  const [language, setLanguage] = useState(code.language)
-  const [content, setContent] = useState(code.code)
-  const [comments, setComments] = useState(code.comments.join('\n'))
+  const [title, setTitle] = useState(code?.title ?? '')
+  const [description, setDescription] = useState(code?.description ?? '')
+  const [language, setLanguage] = useState(code?.language ?? '')
+  const [content, setContent] = useState(code?.code ?? '')
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -33,25 +34,21 @@ export default function CodeEditorForm({
       description: description.trim(),
       language: language.trim(),
       code: content,
-      comments: comments
-        .split(/\r?\n/)
-        .map((comment) => comment.trim())
-        .filter(Boolean),
     })
   }
 
   return (
     <form
-      className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+      className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
       onSubmit={handleSubmit}
     >
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium" htmlFor="edit-title">
+        <label className="block text-sm font-medium" htmlFor="code-title">
           Título
         </label>
         <input
           className={inputClassName}
-          id="edit-title"
+          id="code-title"
           maxLength={160}
           minLength={1}
           onChange={(event) => setTitle(event.currentTarget.value)}
@@ -61,12 +58,12 @@ export default function CodeEditorForm({
       </div>
 
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium" htmlFor="edit-description">
+        <label className="block text-sm font-medium" htmlFor="code-description">
           Descrição
         </label>
         <textarea
           className={inputClassName}
-          id="edit-description"
+          id="code-description"
           maxLength={2000}
           onChange={(event) => setDescription(event.currentTarget.value)}
           rows={3}
@@ -75,12 +72,12 @@ export default function CodeEditorForm({
       </div>
 
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium" htmlFor="edit-language">
+        <label className="block text-sm font-medium" htmlFor="code-language">
           Linguagem
         </label>
         <input
           className={inputClassName}
-          id="edit-language"
+          id="code-language"
           maxLength={80}
           minLength={1}
           onChange={(event) => setLanguage(event.currentTarget.value)}
@@ -90,29 +87,16 @@ export default function CodeEditorForm({
       </div>
 
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium" htmlFor="edit-code">
+        <label className="block text-sm font-medium" htmlFor="code-source">
           Código
         </label>
         <textarea
           className={`${inputClassName} font-mono`}
-          id="edit-code"
+          id="code-source"
           onChange={(event) => setContent(event.currentTarget.value)}
           required
           rows={14}
           value={content}
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <label className="block text-sm font-medium" htmlFor="edit-comments">
-          Comentários (um por linha)
-        </label>
-        <textarea
-          className={inputClassName}
-          id="edit-comments"
-          onChange={(event) => setComments(event.currentTarget.value)}
-          rows={4}
-          value={comments}
         />
       </div>
 
@@ -131,7 +115,7 @@ export default function CodeEditorForm({
           disabled={isSaving}
           type="submit"
         >
-          {isSaving ? 'Salvando...' : 'Salvar alterações'}
+          {isSaving ? 'Salvando...' : submitLabel}
         </button>
         <button
           className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
@@ -139,7 +123,7 @@ export default function CodeEditorForm({
           onClick={onCancel}
           type="button"
         >
-          Cancelar
+          Voltar
         </button>
       </div>
     </form>

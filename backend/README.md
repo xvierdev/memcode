@@ -82,7 +82,10 @@ uv run --group dev pytest
 | `GET` | `/codes/search` | Cookie/JWT | Busca snippets com filtros |
 | `GET` | `/codes/{code_id}` | Cookie/JWT | Consulta um snippet |
 | `PUT` | `/codes/{code_id}` | Cookie/JWT | Atualiza um snippet |
-| `DELETE` | `/codes/{code_id}` | Cookie/JWT | Remove um snippet |
+| `POST` | `/codes/{code_id}/comments` | Cookie/JWT | Adiciona comentário a um snippet existente |
+| `PATCH` | `/codes/{code_id}/comments/{comment_id}` | Cookie/JWT | Edita um comentário |
+| `DELETE` | `/codes/{code_id}/comments/{comment_id}` | Cookie/JWT | Remove um comentário |
+| `DELETE` | `/codes/{code_id}` | Cookie/JWT | Remove um snippet após confirmar a senha atual |
 
 Após o login, a API define um cookie HttpOnly `memcode_access_token` e não expõe o JWT no corpo da resposta. O navegador envia o cookie automaticamente às rotas protegidas. O Swagger, aberto no mesmo host da API, também usa o cookie do navegador. Defina `AUTH_COOKIE_SECURE=true` quando a aplicação estiver servida por HTTPS.
 
@@ -90,4 +93,6 @@ O logout remove o cookie do navegador. Como o JWT é stateless, isso não revoga
 
 Na busca, informe pelo menos um parâmetro entre `title`, `description`, `language` e `code`. Os filtros de título, descrição e conteúdo procuram trechos sem diferenciar maiúsculas de minúsculas; `language` compara o nome completo da linguagem sem diferenciar maiúsculas de minúsculas. Quando mais de um parâmetro é informado, todos precisam corresponder ao snippet. Exemplo: `/codes/search?title=python&language=Python`.
 
-Cada snippet tem `title`, `description`, `language`, `code` e `comments`. Os campos `id`, `created_at` e `updated_at` são gerados pela API. A coleção separada remove o limite acumulado por usuário; cada documento de snippet continua sujeito ao limite BSON do MongoDB (16 MiB), inclusive seus comentários.
+Cada snippet tem `title`, `description`, `language`, `code` e `comments`. Um snippet novo sempre começa sem comentários; comentários são adicionados depois, pelas rotas de comentários. Cada comentário contém `id`, `text`, `created_at` e `updated_at`, e a lista é retornada do mais recente para o mais antigo. Os campos do snippet `id`, `created_at` e `updated_at` são gerados pela API. Comentários legados armazenados como texto são retornados no formato estruturado, com timestamp aproximado baseado na última atualização do snippet. A coleção separada remove o limite acumulado por usuário; cada documento de snippet continua sujeito ao limite BSON do MongoDB (16 MiB), inclusive seus comentários.
+
+A exclusão exige o corpo JSON `{"password": "senha-atual"}` além da sessão autenticada. A API valida a senha antes de remover o snippet.

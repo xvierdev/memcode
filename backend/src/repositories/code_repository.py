@@ -1,11 +1,16 @@
 import re
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from bson import ObjectId
 from pymongo.collection import Collection
 from src.schemas.code import CodeCreate, CodeUpdate
+
+
+def _utc_now() -> datetime:
+    now = datetime.now(UTC)
+    return now.replace(microsecond=(now.microsecond // 1000) * 1000)
 
 
 class CodeRepository:
@@ -19,9 +24,10 @@ class CodeRepository:
 
     def create(self, data: CodeCreate) -> dict[str, Any]:
         code_id = str(uuid4())
-        now = datetime.now(UTC)
+        now = _utc_now()
         document = {
             **data.model_dump(),
+            "comments": [],
             "_id": code_id,
             "user_id": self.user_id,
             "created_at": now,
@@ -78,11 +84,76 @@ class CodeRepository:
             {
                 "$set": {
                     **data.model_dump(),
-                    "updated_at": datetime.now(UTC),
+                    "updated_at": _utc_now(),
                 }
             },
         )
         return self.get(code_id) if result.matched_count == 1 else None
+
+    def add_comment(self, code_id: str, text: str) -> dict[str, Any] | None:
+        query = {"_id": code_id, "user_id": self.user_id}
+        document = self.collection.find_one(query)
+        if document is None:
+            return None
+
+        now = _utc_now()
+        comment = {
+            "id": str(uuid4()),
+            "text": text,
+            "created_at": now,
+            "updated_at": now,
+        }
+        comments = [comment, *self._normalize_comments(document)]
+        result = self.collection.update_one(query, {"$set": {"comments": comments}})
+        return comment if result.matched_count == 1 else None
+
+    def update_comment(
+        self,
+        code_id: str,
+        comment_id: str,
+        text: str,
+    ) -> dict[str, Any] | None:
+        query = {"_id": code_id, "user_id": self.user_id}
+        document = self.collection.find_one(query)
+        if document is None:
+            return None
+
+        comments = self._normalize_comments(document)
+        updated_comment = None
+        for index, comment in enumerate(comments):
+            if comment["id"] == comment_id:
+                updated_comment = {
+                    **comment,
+                    "text": text,
+                    "updated_at": _utc_now(),
+                }
+                comments[index] = updated_comment
+                break
+
+        if updated_comment is None:
+            return None
+
+        result = self.collection.update_one(query, {"$set": {"comments": comments}})
+        return updated_comment if result.matched_count == 1 else None
+
+    def delete_comment(self, code_id: str, comment_id: str) -> bool:
+        query = {"_id": code_id, "user_id": self.user_id}
+        document = self.collection.find_one(query)
+        if document is None:
+            return False
+
+        comments = self._normalize_comments(document)
+        updated_comments = [
+            comment for comment in comments if comment["id"] != comment_id
+        ]
+        if len(updated_comments) == len(comments):
+            return False
+
+        result = self.collection.update_one(
+            query,
+            {"$set": {"comments": updated_comments}},
+        )
+        return result.matched_count == 1
 
     def delete(self, code_id: str) -> bool:
         result = self.collection.delete_one(
@@ -90,12 +161,45 @@ class CodeRepository:
         )
         return result.deleted_count == 1
 
-    @staticmethod
-    def _to_response(document: dict[str, Any]) -> dict[str, Any]:
+    @classmethod
+    def _to_response(cls, document: dict[str, Any]) -> dict[str, Any]:
         response = {
             key: value
             for key, value in document.items()
             if key not in {"_id", "user_id"}
         }
         response["id"] = document["_id"]
+        response["comments"] = cls._normalize_comments(document)
         return response
+
+    @staticmethod
+    def _normalize_comments(document: dict[str, Any]) -> list[dict[str, Any]]:
+        fallback_timestamp = document.get("updated_at", document["created_at"])
+        if fallback_timestamp.tzinfo is None:
+            fallback_timestamp = fallback_timestamp.replace(tzinfo=UTC)
+
+        comments = []
+        for index, comment in enumerate(document.get("comments", [])):
+            if isinstance(comment, str):
+                comment = {
+                    "id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"{document['_id']}:{index}:{comment}",
+                        )
+                    ),
+                    "text": comment,
+                    "created_at": fallback_timestamp,
+                    "updated_at": fallback_timestamp,
+                }
+            else:
+                comment = dict(comment)
+
+            for field in ("created_at", "updated_at"):
+                timestamp = comment[field]
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=UTC)
+                comment[field] = timestamp.astimezone(UTC)
+
+            comments.append(comment)
+        return comments
